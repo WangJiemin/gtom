@@ -1,6 +1,6 @@
 ### Setup ###
 
-gtm uses the MongoDB [oplog](https://docs.mongodb.com/manual/core/replica-set-oplog/) as an event source. 
+gtom uses the MongoDB [oplog](https://docs.mongodb.com/manual/core/replica-set-oplog/) as an event source. 
 You will need to ensure that MongoDB is configured to produce an oplog by 
 [deploying a replica set](http://docs.mongodb.org/manual/tutorial/deploy-replica-set/).
 
@@ -17,13 +17,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"time"
+	
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/bsontype"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"github.com/rwynn/gtm"
-	"reflect"
-	"time"
+	gtom "github.com/WangJiemin/gtom/offical_driver"
 )
 
 func main() {
@@ -45,7 +46,7 @@ func main() {
 		panic(err)
 	}
 	defer client.Disconnect(context.Background())
-	ctx := gtm.Start(client, &gtm.Options{
+	ctx := gtom.Start(client, &gtom.Options{
 		DirectReadNs: []string{"test.test"},
 		ChangeStreamNs: []string{"test.test"},
 		MaxWaitSecs: 10,
@@ -73,7 +74,7 @@ func PipeBuilder(namespace string, changeStream bool) ([]interface{}, error) {
 	// the MongoDB reference for change events at 
 	// https://docs.mongodb.com/manual/reference/change-events/
 
-	// you will only receive changeStream == true when you configure gtm with
+	// you will only receive changeStream == true when you configure gtom with
 	// ChangeStreamNS (requies MongoDB 3.6+).  You cannot build pipelines for
 	// changes using legacy direct oplog tailing
 
@@ -103,20 +104,20 @@ func PipeBuilder(namespace string, changeStream bool) ([]interface{}, error) {
 	return nil, nil
 }
 
-func NewUsers(op *gtm.Op) bool {
+func NewUsers(op *gtom.Op) bool {
 	return op.Namespace == "users.users" && op.IsInsert()
 }
 
 // if you want to listen only for certain events on certain collections
 // pass a filter function in options
-ctx := gtm.Start(client, &gtm.Options{
+ctx := gtom.Start(client, &gtom.Options{
 	NamespaceFilter: NewUsers, // only receive inserts in the user collection
 })
 // more options are available for tuning
-ctx := gtm.Start(client, &gtm.Options{
+ctx := gtom.Start(client, &gtom.Options{
 	NamespaceFilter      nil,           // op filter function that has access to type/ns ONLY
 	Filter               nil,           // op filter function that has access to type/ns/data
-	After:               nil,     	    // if nil defaults to gtm.LastOpTimestamp; not yet supported for ChangeStreamNS
+	After:               nil,     	    // if nil defaults to gtom.LastOpTimestamp; not yet supported for ChangeStreamNS
 	OpLogDisabled:       false,         // true to disable tailing the MongoDB oplog
 	OpLogDatabaseName:   nil,     	    // defaults to "local"
 	OpLogCollectionName: nil,     	    // defaults to "oplog.rs"
@@ -124,7 +125,7 @@ ctx := gtm.Start(client, &gtm.Options{
 	BufferSize:          25,            // defaults to 50. used to batch fetch documents on bursts of activity
 	BufferDuration:      0,             // defaults to 750 ms. after this timeout the batch is force fetched
 	WorkerCount:         8,             // defaults to 1. number of go routines batch fetching concurrently
-	Ordering:            gtm.Document,  // defaults to gtm.Oplog. ordering guarantee of events on the output channel as compared to the oplog
+	Ordering:            gtom.Document,  // defaults to gtom.Oplog. ordering guarantee of events on the output channel as compared to the oplog
 	UpdateDataAsDelta:   false,         // set to true to only receive delta information in the Data field on updates (info straight from oplog)
 	DirectReadNs:        []string{"db.users"}, // set to a slice of namespaces (collections or views) to read data directly from
 	DirectReadSplitMax:  9,             // the max number of times to split a collection for concurrent reads (impacts memory consumption)
@@ -195,7 +196,7 @@ func custom(namespace string, raw *bson.Raw) (interface{}, error) {
 	return nil, errors.New("unsupported namespace")
 }
 
-ctx := gtm.Start(client, &gtm.Options{
+ctx := gtom.Start(client, &gtom.Options{
 	Unmarshal: custom,
 }
 
@@ -213,7 +214,7 @@ for {
 ### Workers ###
 
 You may want to distribute event handling between a set of worker processes on different machines.
-To do this you can leverage the **github.com/rwynn/gtm/consistent** package.  
+To do this you can leverage the **github.com/WangJiemin/gtom** package.  
 
 Create a TOML document containing a list of all the event handlers.
 
@@ -238,13 +239,13 @@ if filterErr != nil {
 // copying the same config file to multiple servers
 ```
 
-Pass the filter into the options when calling gtm.Tail
+Pass the filter into the options when calling gtom.Tail
 
 ```golang
-ctx := gtm.Start(client, &gtm.Options{Filter: filter})
+ctx := gtom.Start(client, &gtom.Options{Filter: filter})
 ```
 
-If you have your multiple filters you can use the gtm utility method ChainOpFilters
+If you have your multiple filters you can use the gtom utility method ChainOpFilters
 
 ```golang
 func ChainOpFilters(filters ...OpFilter) OpFilter
