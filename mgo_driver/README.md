@@ -3,10 +3,14 @@
 ```golang
 package main
 
-import "github.com/globalsign/mgo"
-import "github.com/globalsign/mgo/bson"
-import "github.com/rwynn/gtm"
-import "fmt"
+import (
+	"fmt"
+	
+	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
+	gtom "github.com/WangJiemin/mgo_driver"
+	
+)
 
 func main() {
 	// get a mgo session	
@@ -16,11 +20,11 @@ func main() {
 	}
 	defer session.Close()
 	session.SetMode(mgo.Monotonic, true)
-	// nil options get initialized to gtm.DefaultOptions()
-	ctx := gtm.Start(session, nil)
+	// nil options get initialized to gtom.DefaultOptions()
+	ctx := gtom.Start(session, nil)
 	// ctx.OpC is a channel to read ops from
 	// ctx.ErrC is a channel to read errors from
-	// ctx.Stop() stops all go routines started by gtm.Start
+	// ctx.Stop() stops all go routines started by gtom.Start
 	for {
 		// loop forever receiving events	
 		select {
@@ -63,7 +67,7 @@ func PipeBuilder(namespace string, changeStream bool) ([]interface{}, error) {
 	// the MongoDB reference for change events at 
 	// https://docs.mongodb.com/manual/reference/change-events/
 
-	// you will only receive changeStream == true when you configure gtm with
+	// you will only receive changeStream == true when you configure gtom with
 	// ChangeStreamNS (requies MongoDB 3.6+).  You cannot build pipelines for
 	// changes using legacy direct oplog tailing
 
@@ -93,20 +97,20 @@ func PipeBuilder(namespace string, changeStream bool) ([]interface{}, error) {
 	return nil, nil
 }
 
-func NewUsers(op *gtm.Op) bool {
+func NewUsers(op *gtom.Op) bool {
 	return op.Namespace == "users.users" && op.IsInsert()
 }
 
 // if you want to listen only for certain events on certain collections
 // pass a filter function in options
-ctx := gtm.Start(session, &gtm.Options{
+ctx := gtom.Start(session, &gtom.Options{
 	NamespaceFilter: NewUsers, // only receive inserts in the user collection
 })
 // more options are available for tuning
-ctx := gtm.Start(session, &gtm.Options{
+ctx := gtom.Start(session, &gtom.Options{
 	NamespaceFilter      nil,           // op filter function that has access to type/ns ONLY
 	Filter               nil,           // op filter function that has access to type/ns/data
-	After:               nil,     	    // if nil defaults to gtm.LastOpTimestamp; not yet supported for ChangeStreamNS
+	After:               nil,     	    // if nil defaults to gtom.LastOpTimestamp; not yet supported for ChangeStreamNS
 	OpLogDisabled:       false,         // true to disable tailing the MongoDB oplog
 	OpLogDatabaseName:   nil,     	    // defaults to "local"
 	OpLogCollectionName: nil,     	    // defaults to "oplog.rs"
@@ -114,7 +118,7 @@ ctx := gtm.Start(session, &gtm.Options{
 	BufferSize:          25,            // defaults to 50. used to batch fetch documents on bursts of activity
 	BufferDuration:      0,             // defaults to 750 ms. after this timeout the batch is force fetched
 	WorkerCount:         8,             // defaults to 1. number of go routines batch fetching concurrently
-	Ordering:            gtm.Document,  // defaults to gtm.Oplog. ordering guarantee of events on the output channel as compared to the oplog
+	Ordering:            gtom.Document,  // defaults to gtom.Oplog. ordering guarantee of events on the output channel as compared to the oplog
 	UpdateDataAsDelta:   false,         // set to true to only receive delta information in the Data field on updates (info straight from oplog)
 	DirectReadNs:        []string{"db.users"}, // set to a slice of namespaces to read data directly from bypassing the oplog
 	DirectReadSplitMax:  9,             // the max number of times to split a collection for concurrent reads (impacts memory consumption)
@@ -167,7 +171,7 @@ go func() {
 If you use `ChangeStreamNs` on MongoDB 3.6+ you can ignore this section.  Native change streams in MongoDB are shard aware.  You should connect to the
 `mongos` routing server and change streams will work across shards.  This section is for those pre-3.6 that would like to read changes across all shards.
 
-gtm has support for sharded MongoDB clusters.  You will want to start with a connection to the MongoDB config server to get the list of available shards.
+gtom has support for sharded MongoDB clusters.  You will want to start with a connection to the MongoDB config server to get the list of available shards.
 
 ```golang
 // assuming the CONFIG server for a sharded cluster is running locally on port 27018
@@ -176,7 +180,7 @@ if err != nil {
 panic(err)
 }
 // get the list of shard servers
-shardInfos := gtm.GetShards(configSession)
+shardInfos := gtom.GetShards(configSession)
 ```
 
 for each shard you will create a session and append it to a slice of sessions
@@ -200,7 +204,7 @@ context except that it tails multiple shard servers and coalesces the events to 
 channel
 
 ```golang
-multiCtx := gtm.StartMulti(shardSessions, nil)
+multiCtx := gtom.StartMulti(shardSessions, nil)
 ```
 
 after you have created the multi context for all the shards you can handle new shards being added
@@ -208,7 +212,7 @@ to the cluster at some later time by adding a listener. You will want to add thi
 you enter a loop to read events from the multi context.
 
 ```golang
-insertHandler := func(shardInfo *gtm.ShardInfo) (*mgo.Session, error) {
+insertHandler := func(shardInfo *gtom.ShardInfo) (*mgo.Session, error) {
 	log.Printf("Adding shard found at %s\n", shardInfo.GetURL())
 shardURL := shardInfo.GetURL()
 return mgo.Dial(shardURL)
@@ -241,7 +245,7 @@ func custom(namespace string, raw *bson.Raw) (interface{}, error) {
 	return nil, errors.New("unsupported namespace")
 }
 
-ctx := gtm.Start(session, &gtm.Options{
+ctx := gtom.Start(session, &gtom.Options{
 	Unmarshal: custom,
 }
 
@@ -259,7 +263,7 @@ for {
 ### Workers ###
 
 You may want to distribute event handling between a set of worker processes on different machines.
-To do this you can leverage the **github.com/rwynn/gtm/consistent** package.  
+To do this you can leverage the **github.com/WangJiemin/gtom/mgo_driver** package.  
 
 Create a TOML document containing a list of all the event handlers.
 
@@ -284,13 +288,13 @@ if filterErr != nil {
 // copying the same config file to multiple servers
 ```
 
-Pass the filter into the options when calling gtm.Tail
+Pass the filter into the options when calling gtom.Tail
 
 ```golang
-ctx := gtm.Start(session, &gtm.Options{Filter: filter})
+ctx := gtom.Start(session, &gtom.Options{Filter: filter})
 ```
 
-If you have your multiple filters you can use the gtm utility method ChainOpFilters
+If you have your multiple filters you can use the gtom utility method ChainOpFilters
 
 ```golang
 func ChainOpFilters(filters ...OpFilter) OpFilter
@@ -301,22 +305,20 @@ func ChainOpFilters(filters ...OpFilter) OpFilter
 If you enable SplitVector, to get the best througput possible on direct reads you will want to consider the indexes on your collections.  In the best
 case scenario, for very large collections, you will have an index on a field with a moderately low cardinality.
 For example, if you have 10 million documents in your collection and have a field named `category` that will have a
-value between 1 and 20, and you have an index of this field, then gtm will be able to perform an `internal` MongoDB admin
+value between 1 and 20, and you have an index of this field, then gtom will be able to perform an `internal` MongoDB admin
 command named `splitVector` on this key.  The results of the split vector command will return a sorted list of category split points.
-Once gtm has the split points it is able to start splits+1 go routines with range queries to consume the entire collection concurrently. 
+Once gtom has the split points it is able to start splits+1 go routines with range queries to consume the entire collection concurrently. 
 You will notice a line in the log like this is this is working.
 
 	INFO 2018/04/24 18:23:23 Found 16 splits (17 segments) for namespace test.test using index on category
 
 When this is working you will notice the connection count increase substancially in `mongostat`.  On the other hand, if you
-do not have an index which yields a high number splits, gtm will force a split and it will only be able to start 2 go 
+do not have an index which yields a high number splits, gtom will force a split and it will only be able to start 2 go 
 routines to read your collection concurrently. 
 
-The user that gtm connects with will need to have admin access to perform the `splitVector` command.  If the user does not have
-this access then gtm will use paginating range read of each collection.
+The user that gtom connects with will need to have admin access to perform the `splitVector` command.  If the user does not have
+this access then gtom will use paginating range read of each collection.
 
-Gtm previously supported the `parallelCollectionScan` command to get multiple read cursors on a collection.
+gtom previously supported the `parallelCollectionScan` command to get multiple read cursors on a collection.
 However, this command only worked on the mmapv1 storage engine and will be `removed` completely once the mmapv1 engine is retired.
 It looks like `splitVector` or something like it will be promoted in new versions on MongoDB.  
-
-===
