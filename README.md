@@ -3,7 +3,7 @@ gtom
 gtom（go tail to mongo）是一个用Go编写的实用程序，用于追随MongoDB oplog 发送创建，更新，删除事件。
 
 
-mgo_driver:
+## mgo_driver:
 ### Requirements ###
 + [Go](http://golang.org/doc/install)
 + [globalsign/mgo](https://godoc.org/github.com/globalsign/mgo), a mongodb driver for Go
@@ -330,8 +330,10 @@ Gtm previously supported the `parallelCollectionScan` command to get multiple re
 However, this command only worked on the mmapv1 storage engine and will be `removed` completely once the mmapv1 engine is retired.
 It looks like `splitVector` or something like it will be promoted in new versions on MongoDB.  
 
+===
 
-offical_driver:
+##offical_driver:
+
 ### Requirements ###
 + [Go](http://golang.org/doc/install)
 + [mongodb go driver version 1.0.4](https://github.com/mongodb/mongo-go-driver)
